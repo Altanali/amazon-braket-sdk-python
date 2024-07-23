@@ -8,7 +8,7 @@ from braket.device_schema import DeviceActionType, DeviceCapabilities
 from braket.device_schema.ionq import IonqDeviceCapabilities
 from braket.device_schema.iqm import IqmDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
-from braket.emulators.emulator_passes import (
+from braket.emulators.emulator_passes.gate_device_passes import (
     ConnectivityCriterion,
     GateConnectivityCriterion,
     GateCriterion,

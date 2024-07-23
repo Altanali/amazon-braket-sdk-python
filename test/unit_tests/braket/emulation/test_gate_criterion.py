@@ -4,7 +4,7 @@ import pytest
 from braket.circuits import Circuit, Gate, Instruction
 from braket.circuits.compiler_directives import StartVerbatimBox
 from braket.circuits.noises import BitFlip
-from braket.emulators.emulator_passes.criteria import GateCriterion
+from braket.emulators.emulator_passes.gate_device_criteria import GateCriterion
 
 
 @pytest.fixture

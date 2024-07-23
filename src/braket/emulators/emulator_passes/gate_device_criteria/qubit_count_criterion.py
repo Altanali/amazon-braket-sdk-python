@@ -1,5 +1,5 @@
 from braket.circuits import Circuit
-from braket.emulators.emulator_passes.criteria.emulator_criterion import EmulatorCriterion
+from braket.emulators.emulator_passes import EmulatorCriterion
 
 
 class QubitCountCriterion(EmulatorCriterion):

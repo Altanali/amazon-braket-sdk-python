@@ -3,8 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import Iterable, Union
 
-from braket.emulators.emulator_passes import EmulatorPass, ProgramType
-from braket.emulators.emulator_passes.criteria import EmulatorCriterion
+from braket.emulators.emulator_passes import EmulatorCriterion, EmulatorPass, ProgramType
 
 
 class EmulatorInterface(ABC):

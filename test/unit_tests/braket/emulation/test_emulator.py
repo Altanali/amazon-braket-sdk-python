@@ -10,12 +10,8 @@ from braket.circuits.noises import BitFlip
 from braket.default_simulator import DensityMatrixSimulator, StateVectorSimulator
 from braket.devices import local_simulator
 from braket.emulators import Emulator
-from braket.emulators.emulator_passes import (
-    EmulatorPass,
-    GateCriterion,
-    ProgramType,
-    QubitCountCriterion,
-)
+from braket.emulators.emulator_passes import EmulatorPass, ProgramType
+from braket.emulators.emulator_passes.gate_device_criteria import GateCriterion, QubitCountCriterion
 
 
 class AlwaysFailPass(EmulatorPass):

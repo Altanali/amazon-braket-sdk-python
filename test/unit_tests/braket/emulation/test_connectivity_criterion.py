@@ -4,7 +4,7 @@ import pytest
 from networkx.utils import graphs_equal
 
 from braket.circuits import Circuit
-from braket.emulators.emulator_passes.criteria import ConnectivityCriterion
+from braket.emulators.emulator_passes.gate_device_criteria import ConnectivityCriterion
 
 
 @pytest.fixture

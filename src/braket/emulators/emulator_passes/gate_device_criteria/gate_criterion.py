@@ -4,7 +4,7 @@ from braket.circuits import Circuit
 from braket.circuits.compiler_directives import EndVerbatimBox, StartVerbatimBox
 from braket.circuits.gate import Gate
 from braket.circuits.translations import BRAKET_GATES
-from braket.emulators.emulator_passes.criteria.emulator_criterion import EmulatorCriterion
+from braket.emulators.emulator_passes import EmulatorCriterion
 
 
 class GateCriterion(EmulatorCriterion):
