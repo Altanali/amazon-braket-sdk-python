@@ -31,7 +31,7 @@ from braket.device_schema.rigetti import RigettiDeviceCapabilities
 from braket.devices import Devices
 from braket.devices.local_simulator import LocalSimulator
 from braket.emulators import Emulator
-from braket.emulators.emulator_passes import (
+from braket.emulators.emulator_passes.gate_device_passes import (
     ConnectivityCriterion,
     GateConnectivityCriterion,
     GateCriterion,
