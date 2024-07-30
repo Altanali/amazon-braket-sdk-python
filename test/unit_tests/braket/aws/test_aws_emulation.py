@@ -4,16 +4,18 @@ from unittest.mock import Mock, patch
 import networkx as nx
 import numpy as np
 import pytest
+from decimal import Decimal
 from common_test_utils import RIGETTI_ARN, RIGETTI_REGION
 
 from braket.aws import AwsDevice
-from braket.aws.aws_emulation import _get_qpu_gate_translations
+from braket.aws.aws_emulation import _get_qpu_gate_translations, ahs_criterion
 from braket.aws.aws_noise_models import (
     GateDeviceCalibrationData,
     GateFidelity,
     _setup_calibration_specs,
     device_noise_model,
 )
+from braket.ahs import AnalogHamiltonianSimulation
 from braket.circuits import Circuit, Gate
 from braket.circuits.noise_model import GateCriteria, NoiseModel, ObservableCriteria
 from braket.circuits.noises import (
@@ -28,6 +30,7 @@ from braket.device_schema.error_mitigation.debias import Debias
 from braket.device_schema.ionq import IonqDeviceCapabilities, IonqDeviceParameters
 from braket.device_schema.iqm import IqmDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
+from braket.device_schema.quera import QueraDeviceCapabilities
 from braket.devices import Devices
 from braket.devices.local_simulator import LocalSimulator
 from braket.emulation import Emulator
@@ -37,11 +40,18 @@ from braket.emulation.emulation_passes.gate_device_passes import (
     GateValidator,
     QubitCountValidator,
 )
+from braket.emulation.emulation_passes.ahs_passes import AhsValidator
+from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
+    DeviceCapabilitiesConstants
+)
+from braket.ir.ahs.program_v1 import Program as AhsProgram
+
 
 REGION = "us-west-1"
 
 IONQ_ARN = "arn:aws:braket:::device/qpu/ionq/Forte1"
 IQM_ARN = "arn:aws:braket:::device/qpu/iqm/Garent"
+QUERA_ARN = "arn:aws:braket:::device/qpu/quera/Aquila"
 
 
 MOCK_QPU_GATE_DURATIONS = {
@@ -252,13 +262,192 @@ MOCK_IQM_QPU_CAPABILITIES_1 = {
 
 
 @pytest.fixture
-def rigetti_device_capabilities():
-    return RigettiDeviceCapabilities.parse_obj(MOCK_RIGETTI_QPU_CAPABILITIES_1)
+def rigetti_capabilities_unsupported_actions(rigetti_device_capabilities):
+    rigetti_capabilities_obj = rigetti_device_capabilities.dict()
+    rigetti_capabilities_obj["action"] = {
+        "braket.ir.jaqcd.program": {
+            "actionType": "braket.ir.jaqcd.program",
+            "version": ["1"],
+            "supportedOperations": ["x", "y"],
+            "supportedResultTypes": [
+                {
+                    "name": "resultType1",
+                    "observables": ["observable1"],
+                    "minShots": 0,
+                    "maxShots": 4,
+                }
+            ],
+        }
+    }
+    return RigettiDeviceCapabilities(**rigetti_capabilities_obj)
 
 
 @pytest.fixture
-def iqm_device_capabilities():
-    return IqmDeviceCapabilities.parse_obj(MOCK_IQM_QPU_CAPABILITIES_1)
+def quera_device_capabilities():
+    device_properties = {
+        "service": {
+            "braketSchemaHeader": {
+                "name": "braket.device_schema.device_service_properties",
+                "version": "1",
+            },
+            "executionWindows": [
+                {
+                    "executionDay": "Weekdays",
+                    "windowStartHour": "09:00:00",
+                    "windowEndHour": "10:00:00",
+                }
+            ],
+            "shotsRange": [1, 10000],
+            "deviceCost": {"price": 0.25, "unit": "minute"},
+            "deviceDocumentation": {
+                "imageUrl": "",
+                "summary": "",
+                "externalDocumentationUrl": "",
+            },
+            "deviceLocation": "Boston, USA",
+            "updatedAt": "2022-05-15T19:28:02.869136",
+        },
+        "action": {
+            "braket.ir.ahs.program": {"version": ["1"], "actionType": "braket.ir.ahs.program"}
+        },
+        "deviceParameters": {},
+        "braketSchemaHeader": {
+            "name": "braket.device_schema.quera.quera_device_capabilities",
+            "version": "1",
+        },
+        "paradigm": {
+            "braketSchemaHeader": {
+                "name": "braket.device_schema.quera.quera_ahs_paradigm_properties",
+                "version": "1",
+            },
+            "qubitCount": 256,
+            "lattice": {
+                "area": {"width": 0.0001, "height": 0.0001},
+                "geometry": {
+                    "spacingRadialMin": 4e-06,
+                    "spacingVerticalMin": 2.5e-06,
+                    "positionResolution": 1e-07,
+                    "numberSitesMax": 256,
+                },
+            },
+            "rydberg": {
+                "c6Coefficient": 5.42e-24,
+                "rydbergGlobal": {
+                    "rabiFrequencyRange": [0, 25000000],
+                    "rabiFrequencyResolution": 400,
+                    "rabiFrequencySlewRateMax": 250000000000000,
+                    "detuningRange": [-125000000, 125000000],
+                    "detuningResolution": 0.2,
+                    "detuningSlewRateMax": 2500000000000000,
+                    "phaseRange": [-99, 99],
+                    "phaseResolution": 5e-07,
+                    "timeResolution": 1e-09,
+                    "timeDeltaMin": 1e-08,
+                    "timeMin": 0,
+                    "timeMax": 4e-06,
+                },
+                "rydbergLocal": {
+                    "detuningRange": [0, 125000000.0],
+                    "detuningSlewRateMax": 1256600000000000.0,
+                    "siteCoefficientRange": [0.0, 1.0],
+                    "numberLocalDetuningSitesMax": 200,
+                    "spacingRadialMin": 5e-06,
+                    "timeResolution": 1e-9,
+                    "timeDeltaMin": 1e-8,
+                },
+            },
+            "performance": {
+                "lattice": {
+                    "atomCaptureProbabilityTypical": Decimal("0.001"),
+                    "atomCaptureProbabilityWorst": Decimal("0.002"),
+                    "atomDetectionErrorFalseNegativeTypical": Decimal("0.001"),
+                    "atomDetectionErrorFalseNegativeWorst": Decimal("0.005"),
+                    "atomDetectionErrorFalsePositiveTypical": Decimal("0.001"),
+                    "atomDetectionErrorFalsePositiveWorst": Decimal("0.005"),
+                    "atomLossProbabilityTypical": Decimal("0.005"),
+                    "atomLossProbabilityWorst": Decimal("0.01"),
+                    "atomPositionError": Decimal("2E-7"),
+                    "fillingErrorTypical": Decimal("0.008"),
+                    "fillingErrorWorst": Decimal("0.05"),
+                    "positionErrorAbs": Decimal("2.25E-7"),
+                    "sitePositionError": Decimal("1E-7"),
+                    "vacancyErrorTypical": Decimal("0.001"),
+                    "vacancyErrorWorst": Decimal("0.005"),
+                },
+                "rydberg": {
+                    "rydbergGlobal": {
+                        "T1Ensemble": Decimal("0.000075"),
+                        "T1Single": Decimal("0.000075"),
+                        "T2BlockadedRabiEnsemble": Decimal("0.000007"),
+                        "T2BlockadedRabiSingle": Decimal("0.000008"),
+                        "T2EchoEnsemble": Decimal("0.000007"),
+                        "T2EchoSingle": Decimal("0.000008"),
+                        "T2RabiEnsemble": Decimal("0.000007"),
+                        "T2RabiSingle": Decimal("0.000008"),
+                        "T2StarEnsemble": Decimal("0.00000475"),
+                        "T2StarSingle": Decimal("0.000005"),
+                        "detuningError": Decimal("1000000.0"),
+                        "detuningInhomogeneity": Decimal("1000000.0"),
+                        "groundDetectionError": Decimal("0.05"),
+                        "groundPrepError": Decimal("0.01"),
+                        "rabiAmplitudeRampCorrection": [
+                            {"rabiCorrection": Decimal("0.92"), "rampTime": Decimal("5E-8")},
+                            {"rabiCorrection": Decimal("0.97"), "rampTime": Decimal("7.5E-8")},
+                            {"rabiCorrection": Decimal("1.0"), "rampTime": Decimal("1E-7")},
+                        ],
+                        "rabiFrequencyErrorRel": Decimal("0.03"),
+                        "rabiFrequencyGlobalErrorRel": Decimal("0.02"),
+                        "rabiFrequencyInhomogeneityRel": Decimal("0.02"),
+                        "rydbergDetectionError": Decimal("0.1"),
+                        "rydbergPrepErrorBest": Decimal("0.05"),
+                        "rydbergPrepErrorWorst": Decimal("0.07"),
+                    },
+                    "rydbergLocal": None,
+                },
+            },
+        },
+    }
+    return QueraDeviceCapabilities(**device_properties)
+
+
+@pytest.fixture
+def ahs_device_capabilities_constants():
+    capabilities = {
+        "MAX_SITES": 256,
+        "MIN_DISTANCE": 4e-06,
+        "MIN_ROW_DISTANCE": 2.5e-06,
+        "SITE_PRECISION": 1e-07,
+        "BOUNDING_BOX_SIZE_X": 0.0001,
+        "BOUNDING_BOX_SIZE_Y": 0.0001,
+        "MAX_FILLED_SITES": 256,
+        "MIN_TIME": 0,
+        "MAX_TIME": 4e-06,
+        "GLOBAL_TIME_PRECISION": 1e-09,
+        "GLOBAL_MIN_TIME_PRECISION": 1e-08,
+        "GLOBAL_MIN_TIME_SEPARATION": 1e-08,
+        "GLOBAL_AMPLITUDE_VALUE_MIN": 0,
+        "GLOBAL_AMPLITUDE_VALUE_MAX": 25000000,
+        "GLOBAL_AMPLITUDE_VALUE_PRECISION": 400,
+        "GLOBAL_AMPLITUDE_SLOPE_MAX": 250000000000000,
+        "GLOBAL_PHASE_VALUE_MIN": -99,
+        "GLOBAL_PHASE_VALUE_MAX": 99,
+        "GLOBAL_PHASE_VALUE_PRECISION": 5e-07,
+        "GLOBAL_DETUNING_VALUE_MIN": -125000000,
+        "GLOBAL_DETUNING_VALUE_MAX": 125000000,
+        "GLOBAL_DETUNING_VALUE_PRECISION": 0.2,
+        "GLOBAL_DETUNING_SLOPE_MAX": 2500000000000000,
+        "LOCAL_RYDBERG_CAPABILITIES": True,
+        "LOCAL_MIN_DISTANCE_BETWEEN_SHIFTED_SITES": 5e-06,
+        "LOCAL_TIME_PRECISION": 1e-09,
+        "LOCAL_MIN_TIME_SEPARATION": 1e-08,
+        "LOCAL_MAGNITUDE_SEQUENCE_VALUE_MIN": 0,
+        "LOCAL_MAGNITUDE_SEQUENCE_VALUE_MAX": 125000000.0,
+        "LOCAL_MAGNITUDE_SLOPE_MAX": 1256600000000000.0,
+        "LOCAL_MAX_NONZERO_PATTERN_VALUES": 200,
+        "MAGNITUDE_PATTERN_VALUE_MIN": 0.0,
+        "MAGNITUDE_PATTERN_VALUE_MAX": 1.0,
+    }
+    return DeviceCapabilitiesConstants(**capabilities)
 
 
 MOCK_IONQ_GATE_MODEL_CAPABILITIES_JSON_1 = {
@@ -306,6 +495,18 @@ MOCK_IONQ_GATE_MODEL_CAPABILITIES_JSON_1 = {
     },
     "deviceParameters": json.loads(IonqDeviceParameters.schema_json()),
 }
+
+
+
+@pytest.fixture
+def rigetti_device_capabilities():
+    return RigettiDeviceCapabilities.parse_obj(MOCK_RIGETTI_QPU_CAPABILITIES_1)
+
+
+@pytest.fixture
+def iqm_device_capabilities():
+    return IqmDeviceCapabilities.parse_obj(MOCK_IQM_QPU_CAPABILITIES_1)
+
 
 
 @pytest.fixture
@@ -501,6 +702,37 @@ def mock_ionq_qpu_device(ionq_device_capabilities):
             {"queue": "JOBS_QUEUE", "queueSize": "0 (3 prioritized job(s) running)"},
         ],
     }
+    
+@pytest.fixture
+def mock_quera_qpu_device(quera_device_capabilities):
+    return {
+        "deviceName": "Aquila",
+        "deviceType": "QPU",
+        "providerName": "QuEra",
+        "deviceStatus": "OFFLINE",
+        "deviceCapabilities": quera_device_capabilities.json(),
+        "deviceQueueInfo": [
+            {"queue": "QUANTUM_TASKS_QUEUE", "queueSize": "19", "queuePriority": "Normal"},
+            {"queue": "QUANTUM_TASKS_QUEUE", "queueSize": "3", "queuePriority": "Priority"},
+            {"queue": "JOBS_QUEUE", "queueSize": "0 (3 prioritized job(s) running)"},
+        ],
+    }
+
+
+@pytest.fixture
+def mock_device_with_unsupported_actions(rigetti_capabilities_unsupported_actions):
+    return {
+        "deviceName": "FakeDevice",
+        "deviceType": "QPU",
+        "providerName": "Rigetti",
+        "deviceStatus": "OFFLINE",
+        "deviceCapabilities": rigetti_capabilities_unsupported_actions.json(),
+        "deviceQueueInfo": [
+            {"queue": "QUANTUM_TASKS_QUEUE", "queueSize": "19", "queuePriority": "Normal"},
+            {"queue": "QUANTUM_TASKS_QUEUE", "queueSize": "3", "queuePriority": "Priority"},
+            {"queue": "JOBS_QUEUE", "queueSize": "0 (3 prioritized job(s) running)"},
+        ],
+    }
 
 
 @pytest.fixture
@@ -562,6 +794,25 @@ def rigetti_device(aws_session, mock_rigetti_qpu_device):
 
     return _device()
 
+
+@pytest.fixture
+def quera_device(aws_session, mock_quera_qpu_device):
+    def _device():
+        aws_session.get_device.return_value = mock_quera_qpu_device
+        aws_session.search_devices.return_value = [mock_quera_qpu_device]
+        return AwsDevice(QUERA_ARN, aws_session)
+
+    return _device()
+
+
+@pytest.fixture
+def device_with_unsupported_actions(aws_session, mock_device_with_unsupported_actions):
+    def _device():
+        aws_session.get_device.return_value = mock_device_with_unsupported_actions
+        aws_session.search_devices.return_value = [mock_device_with_unsupported_actions]
+        return AwsDevice(RIGETTI_ARN, aws_session)
+
+    return _device()
 
 def test_ionq_emulator(ionq_device):
     emulator = ionq_device.emulator
@@ -712,3 +963,112 @@ def test_get_emulator_multiple(mock_setup, rigetti_device):
     assert emulator._emulator_passes == []
     emulator = rigetti_device.emulator
     mock_setup.assert_called_once()
+
+
+
+def test_fail_create_emulator_unsupported_actions(device_with_unsupported_actions):
+    error_message = "Emulators for device FakeDevice are not supported."
+    with pytest.raises(ValueError, match=error_message):
+        device_with_unsupported_actions.emulator
+
+
+def test_create_ahs_criterion_with_no_local_rydberg(
+    quera_device_capabilities, ahs_device_capabilities_constants
+):
+    quera_device_capabilities.paradigm.rydberg.rydbergLocal = None
+    ahs_device_capabilities_constants_dict = ahs_device_capabilities_constants.dict()
+    ahs_device_capabilities_constants_dict.update(
+        {
+            "LOCAL_RYDBERG_CAPABILITIES": False,
+            "LOCAL_MIN_DISTANCE_BETWEEN_SHIFTED_SITES": None,
+            "LOCAL_TIME_PRECISION": None,
+            "LOCAL_MIN_TIME_SEPARATION": None,
+            "LOCAL_MAGNITUDE_SEQUENCE_VALUE_MIN": None,
+            "LOCAL_MAGNITUDE_SEQUENCE_VALUE_MAX": None,
+            "LOCAL_MAGNITUDE_SLOPE_MAX": None,
+            "LOCAL_MAX_NONZERO_PATTERN_VALUES": None,
+            "MAGNITUDE_PATTERN_VALUE_MIN": None,
+            "MAGNITUDE_PATTERN_VALUE_MAX": None,
+        }
+    )
+    ahs_device_capabilities_constants = DeviceCapabilitiesConstants(
+        **ahs_device_capabilities_constants_dict
+    )
+    assert ahs_criterion(quera_device_capabilities) == AhsValidator(
+        ahs_device_capabilities_constants
+    )
+
+
+@pytest.fixture
+def ahs_program_data():
+    data = {
+        "setup": {
+            "ahs_register": {
+                "sites": [
+                    [Decimal("0.0"), Decimal("0.0")],
+                    [Decimal("0.0"), Decimal("4e-6")],
+                    [Decimal("5e-6"), Decimal("0.0")],
+                    [Decimal("5e-6"), Decimal("4e-6")],
+                ],
+                "filling": [1, 0, 1, 0],
+            }
+        },
+        "hamiltonian": {
+            "drivingFields": [
+                {
+                    "amplitude": {
+                        "pattern": "uniform",
+                        "time_series": {
+                            "times": [0.0, 1e-07, 3.9e-06, 4e-06],
+                            "values": [0.0, 12566400.0, 12566400.0, 0],
+                        },
+                    },
+                    "phase": {
+                        "pattern": "uniform",
+                        "time_series": {
+                            "times": [0.0, 1e-07, 3.9e-06, 4e-06],
+                            "values": [0.0, 0, -16.0832, -16.0832],
+                        },
+                    },
+                    "detuning": {
+                        "pattern": "uniform",
+                        "time_series": {
+                            "times": [0.0, 1e-07, 3.9e-06, 4e-06],
+                            "values": [-125000000, -125000000, 125000000, 125000000],
+                        },
+                    },
+                }
+            ],
+            "localDetuning": [
+                {
+                    "magnitude": {
+                        "time_series": {
+                            "times": [0.0, 1e-07, 3.9e-06, 4e-06],
+                            "values": [0.0, 12566400.0, 12566400.0, 0],
+                        },
+                        "pattern": [0.0, 0.1, 0.2, 0.0],
+                    }
+                }
+            ],
+        },
+    }
+    return AhsProgram.parse_obj(data)
+
+
+@pytest.fixture
+def ahs_program(ahs_program_data):
+    return AnalogHamiltonianSimulation.from_ir(ahs_program_data)
+
+
+def test_ahs_emulator_validate_program(quera_device, ahs_program_data):
+    try:
+        quera_device.validate(ahs_program_data)
+    except Exception as e:
+        pytest.fail("Validate test failed: " + str(e))
+
+
+def test_ahs_emulate_program(quera_device, ahs_program):
+    try:
+        quera_device.emulate(ahs_program, shots=1)
+    except Exception as e:
+        pytest.fail("Validate test failed: " + str(e))

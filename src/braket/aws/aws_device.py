@@ -28,6 +28,7 @@ from networkx import DiGraph, complete_graph, from_edgelist
 from braket.ahs.analog_hamiltonian_simulation import AnalogHamiltonianSimulation
 from braket.annealing.problem import Problem
 from braket.aws.aws_emulation import (
+    ahs_criterion,
     connectivity_validator,
     gate_connectivity_validator,
     gate_validator,
@@ -41,7 +42,12 @@ from braket.aws.queue_information import QueueDepthInfo, QueueType
 from braket.circuits import Circuit, Gate, QubitSet
 from braket.circuits.gate_calibrations import GateCalibrations
 from braket.circuits.noise_model import NoiseModel
-from braket.device_schema import DeviceCapabilities, ExecutionDay, GateModelQpuParadigmProperties
+from braket.device_schema import (
+    DeviceActionType,
+    DeviceCapabilities,
+    ExecutionDay,
+    GateModelQpuParadigmProperties,
+)
 from braket.device_schema.dwave import DwaveProviderProperties
 
 # TODO: Remove device_action module once this is added to init in the schemas repo
@@ -895,6 +901,14 @@ class AwsDevice(Device):
         return self._emulator
 
     def _setup_emulator(self) -> Emulator:
+        if DeviceActionType.OPENQASM in self.properties.action.keys():
+            return self._setup_gate_device_emulator()
+        elif DeviceActionType.AHS in self.properties.action.keys():
+            return self._setup_ahs_device_emulator()
+        else:
+            raise ValueError(f"Emulators for device {self._name} are not supported.")
+
+    def _setup_gate_device_emulator(self) -> Emulator:
         """
         Sets up an Emulator object whose properties mimic that of this AwsDevice, if the device is a
         real QPU (not a simulator).
@@ -912,6 +926,11 @@ class AwsDevice(Device):
         self._emulator.add_pass(gate_validator(self.properties))
         self._emulator.add_pass(connectivity_validator(self.properties, self.topology_graph))
         self._emulator.add_pass(gate_connectivity_validator(self.properties, self.topology_graph))
+        return self._emulator
+
+    def _setup_ahs_device_emulator(self) -> Emulator:
+        self._emulator = Emulator(backend="braket_ahs", name=self._name)
+        self._emulator.add_pass(ahs_criterion(self.properties))
         return self._emulator
 
     def validate(
