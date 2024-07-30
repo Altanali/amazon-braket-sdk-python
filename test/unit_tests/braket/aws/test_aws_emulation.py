@@ -1,12 +1,13 @@
 import json
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import networkx as nx
 import numpy as np
 import pytest
-from decimal import Decimal
 from common_test_utils import RIGETTI_ARN, RIGETTI_REGION
 
+from braket.ahs import AnalogHamiltonianSimulation
 from braket.aws import AwsDevice
 from braket.aws.aws_emulation import _get_qpu_gate_translations, ahs_criterion
 from braket.aws.aws_noise_models import (
@@ -15,7 +16,6 @@ from braket.aws.aws_noise_models import (
     _setup_calibration_specs,
     device_noise_model,
 )
-from braket.ahs import AnalogHamiltonianSimulation
 from braket.circuits import Circuit, Gate
 from braket.circuits.noise_model import GateCriteria, NoiseModel, ObservableCriteria
 from braket.circuits.noises import (
@@ -29,23 +29,22 @@ from braket.device_schema import DeviceCapabilities
 from braket.device_schema.error_mitigation.debias import Debias
 from braket.device_schema.ionq import IonqDeviceCapabilities, IonqDeviceParameters
 from braket.device_schema.iqm import IqmDeviceCapabilities
-from braket.device_schema.rigetti import RigettiDeviceCapabilities
 from braket.device_schema.quera import QueraDeviceCapabilities
+from braket.device_schema.rigetti import RigettiDeviceCapabilities
 from braket.devices import Devices
 from braket.devices.local_simulator import LocalSimulator
 from braket.emulation import Emulator
+from braket.emulation.emulation_passes.ahs_passes import AhsValidator
+from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
+    DeviceCapabilitiesConstants,
+)
 from braket.emulation.emulation_passes.gate_device_passes import (
     ConnectivityValidator,
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
 )
-from braket.emulation.emulation_passes.ahs_passes import AhsValidator
-from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
-    DeviceCapabilitiesConstants
-)
 from braket.ir.ahs.program_v1 import Program as AhsProgram
-
 
 REGION = "us-west-1"
 
@@ -497,7 +496,6 @@ MOCK_IONQ_GATE_MODEL_CAPABILITIES_JSON_1 = {
 }
 
 
-
 @pytest.fixture
 def rigetti_device_capabilities():
     return RigettiDeviceCapabilities.parse_obj(MOCK_RIGETTI_QPU_CAPABILITIES_1)
@@ -506,7 +504,6 @@ def rigetti_device_capabilities():
 @pytest.fixture
 def iqm_device_capabilities():
     return IqmDeviceCapabilities.parse_obj(MOCK_IQM_QPU_CAPABILITIES_1)
-
 
 
 @pytest.fixture
@@ -702,7 +699,8 @@ def mock_ionq_qpu_device(ionq_device_capabilities):
             {"queue": "JOBS_QUEUE", "queueSize": "0 (3 prioritized job(s) running)"},
         ],
     }
-    
+
+
 @pytest.fixture
 def mock_quera_qpu_device(quera_device_capabilities):
     return {
@@ -813,6 +811,7 @@ def device_with_unsupported_actions(aws_session, mock_device_with_unsupported_ac
         return AwsDevice(RIGETTI_ARN, aws_session)
 
     return _device()
+
 
 def test_ionq_emulator(ionq_device):
     emulator = ionq_device.emulator
@@ -963,7 +962,6 @@ def test_get_emulator_multiple(mock_setup, rigetti_device):
     assert emulator._emulator_passes == []
     emulator = rigetti_device.emulator
     mock_setup.assert_called_once()
-
 
 
 def test_fail_create_emulator_unsupported_actions(device_with_unsupported_actions):
