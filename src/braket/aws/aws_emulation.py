@@ -9,7 +9,7 @@ from braket.device_schema.ionq import IonqDeviceCapabilities
 from braket.device_schema.iqm import IqmDeviceCapabilities
 from braket.device_schema.quera import QueraDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
-from braket.emulation.emulation_passes.ahs_passes import AhsValidator
+from braket.emulation.emulation_passes.ahs_passes import AhsValidator, AhsNoise, AhsNoiseData
 from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
     DeviceCapabilitiesConstants,
 )
@@ -19,6 +19,7 @@ from braket.emulation.emulation_passes.gate_device_passes import (
     GateValidator,
     QubitCountValidator,
 )
+
 
 
 def qubit_count_validator(properties: DeviceCapabilities) -> QubitCountValidator:
@@ -303,3 +304,33 @@ def _(properties: QueraDeviceCapabilities) -> DeviceCapabilitiesConstants:
         ) = rydberg_local["siteCoefficientRange"]
 
     return DeviceCapabilitiesConstants.parse_obj(capabilities)
+
+
+
+def ahs_noise_model(properties: DeviceCapabilities) -> AhsNoise: 
+    return _ahs_noise_model(properties)
+
+@singledispatch
+def _ahs_noise_model(properties: DeviceCapabilities) -> AhsNoise:
+    raise NotImplementedError("An AHS noise model cannot be created from device capabilities of "
+                              f"type {type(properties)}.")
+    
+@_ahs_noise_model.register(QueraDeviceCapabilities)
+def _(properties: QueraDeviceCapabilities): 
+
+    capabilities = properties.paradigm
+    performance = capabilities.performance
+    noise_data = AhsNoiseData(
+        site_position_error= float(performance.lattice.sitePositionError),
+        filling_error = float(performance.lattice.vacancyErrorTypical),
+        vacancy_error = float(performance.lattice.vacancyErrorTypical), 
+        ground_prep_error = float(performance.rydberg.rydbergGlobal.groundPrepError),
+        rabi_amplitude_ramp_correction = performance.rydberg.rydbergGlobal.rabiAmplitudeRampCorrection,
+        rabi_frequency_error_rel = float(performance.rydberg.rydbergGlobal.rabiFrequencyGlobalErrorRel),
+        detuning_error = float(performance.rydberg.rydbergGlobal.detuningError),
+        detuning_inhomogeneity = float(performance.rydberg.rydbergGlobal.detuningInhomogeneity), 
+        atom_detection_error_false_positive = float(performance.lattice.atomDetectionErrorFalsePositiveTypical), 
+        atom_detection_error_false_negative = float(performance.lattice.atomDetectionErrorFalseNegativeTypical), 
+        rabi_amplitude_max = float(capabilities.rydberg.rydbergGlobal.rabiFrequencyRange[-1])
+    )
+    return AhsNoise(noise_data)
