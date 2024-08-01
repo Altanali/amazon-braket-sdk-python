@@ -30,6 +30,7 @@ from braket.ahs.analog_hamiltonian_simulation import AnalogHamiltonianSimulation
 from braket.annealing.problem import Problem
 from braket.aws.aws_emulation import (
     ahs_criterion,
+    ahs_noise_model,
     connectivity_validator,
     gate_connectivity_validator,
     gate_validator,
@@ -932,6 +933,7 @@ class AwsDevice(Device):
     def _setup_ahs_device_emulator(self) -> Emulator:
         self._emulator = Emulator(backend="braket_ahs", name=self._name)
         self._emulator.add_pass(ahs_criterion(self.properties))
+        self._emulator.add_pass(ahs_noise_model(self.properties))
         return self._emulator
 
     def validate(
