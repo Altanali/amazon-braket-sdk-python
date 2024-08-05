@@ -7,13 +7,19 @@ from networkx import DiGraph
 from braket.device_schema import DeviceActionType, DeviceCapabilities
 from braket.device_schema.ionq import IonqDeviceCapabilities
 from braket.device_schema.iqm import IqmDeviceCapabilities
+from braket.device_schema.quera import QueraDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
+from braket.emulation.emulation_passes.ahs_passes import AhsValidator, AhsNoise, AhsNoiseData
+from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
+    DeviceCapabilitiesConstants,
+)
 from braket.emulation.emulation_passes.gate_device_passes import (
     ConnectivityValidator,
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
 )
+
 
 
 def qubit_count_validator(properties: DeviceCapabilities) -> QubitCountValidator:
@@ -212,3 +218,119 @@ def _(properties: RigettiDeviceCapabilities, gate_name: str) -> str:
 def _(properties: IonqDeviceCapabilities, gate_name: str) -> str:
     translations = {"GPI": "GPi", "GPI2": "GPi2"}
     return translations.get(gate_name, gate_name)
+
+
+def ahs_criterion(properties: DeviceCapabilities) -> AhsValidator:
+    """
+    Creates an AHS program validation pass using the input QPU device capabilities.
+
+    Args:
+        properties (DeviceCapabilities): Device capabilities of a QPU device that supports
+            Analog Hamiltonian Simulation Programs.
+
+    Returns:
+        AhsValidator: An emulator pass that validates whether or not an AHS program is able to run
+        on the target device.
+    """
+    device_capabilities_constants = _get_ahs_device_capabilities(properties)
+    return AhsValidator(device_capabilities_constants)
+
+
+@singledispatch
+def _get_ahs_device_capabilities(properties: DeviceCapabilities) -> DeviceCapabilitiesConstants:
+    raise NotImplementedError(
+        "AHS Device Capabilities Constants cannot be created"
+        f"using capabilities type ({type(properties)})"
+    )
+
+
+@_get_ahs_device_capabilities.register(QueraDeviceCapabilities)
+def _(properties: QueraDeviceCapabilities) -> DeviceCapabilitiesConstants:
+    properties = properties.dict()
+    capabilities = dict()
+    lattice = properties["paradigm"]["lattice"]
+    capabilities["MAX_SITES"] = lattice["geometry"]["numberSitesMax"]
+    capabilities["MIN_DISTANCE"] = lattice["geometry"]["spacingRadialMin"]
+    capabilities["MIN_ROW_DISTANCE"] = lattice["geometry"]["spacingVerticalMin"]
+    capabilities["SITE_PRECISION"] = lattice["geometry"]["positionResolution"]
+    capabilities["BOUNDING_BOX_SIZE_X"] = lattice["area"]["width"]
+    capabilities["BOUNDING_BOX_SIZE_Y"] = lattice["area"]["height"]
+    capabilities["MAX_FILLED_SITES"] = properties["paradigm"]["qubitCount"]
+
+    rydberg = properties["paradigm"]["rydberg"]
+    rydberg_global = rydberg["rydbergGlobal"]
+    capabilities["MIN_TIME"] = rydberg_global["timeMin"]
+    capabilities["MAX_TIME"] = rydberg_global["timeMax"]
+    capabilities["GLOBAL_TIME_PRECISION"] = rydberg_global["timeResolution"]
+    capabilities["GLOBAL_MIN_TIME_SEPARATION"] = rydberg_global["timeDeltaMin"]
+
+    (
+        capabilities["GLOBAL_AMPLITUDE_VALUE_MIN"],
+        capabilities["GLOBAL_AMPLITUDE_VALUE_MAX"],
+    ) = rydberg_global["rabiFrequencyRange"]
+    capabilities["GLOBAL_AMPLITUDE_VALUE_PRECISION"] = rydberg_global["rabiFrequencyResolution"]
+    capabilities["GLOBAL_AMPLITUDE_SLOPE_MAX"] = rydberg_global["rabiFrequencySlewRateMax"]
+
+    (
+        capabilities["GLOBAL_PHASE_VALUE_MIN"],
+        capabilities["GLOBAL_PHASE_VALUE_MAX"],
+    ) = rydberg_global["phaseRange"]
+    capabilities["GLOBAL_PHASE_VALUE_PRECISION"] = rydberg_global["phaseResolution"]
+
+    (
+        capabilities["GLOBAL_DETUNING_VALUE_MIN"],
+        capabilities["GLOBAL_DETUNING_VALUE_MAX"],
+    ) = rydberg_global["detuningRange"]
+    capabilities["GLOBAL_DETUNING_VALUE_PRECISION"] = rydberg_global["detuningResolution"]
+    capabilities["GLOBAL_DETUNING_SLOPE_MAX"] = rydberg_global["detuningSlewRateMax"]
+
+    rydberg_local = rydberg.get("rydbergLocal")
+    if rydberg_local:
+        capabilities["LOCAL_RYDBERG_CAPABILITIES"] = True
+        capabilities["LOCAL_MIN_DISTANCE_BETWEEN_SHIFTED_SITES"] = rydberg_local["spacingRadialMin"]
+        capabilities["LOCAL_TIME_PRECISION"] = rydberg_local["timeResolution"]
+        capabilities["LOCAL_MIN_TIME_SEPARATION"] = rydberg_local["timeDeltaMin"]
+        (
+            capabilities["LOCAL_MAGNITUDE_SEQUENCE_VALUE_MIN"],
+            capabilities["LOCAL_MAGNITUDE_SEQUENCE_VALUE_MAX"],
+        ) = rydberg_local["detuningRange"]
+        capabilities["LOCAL_MAGNITUDE_SLOPE_MAX"] = rydberg_local["detuningSlewRateMax"]
+        capabilities["LOCAL_MAX_NONZERO_PATTERN_VALUES"] = rydberg_local[
+            "numberLocalDetuningSitesMax"
+        ]
+        (
+            capabilities["MAGNITUDE_PATTERN_VALUE_MIN"],
+            capabilities["MAGNITUDE_PATTERN_VALUE_MAX"],
+        ) = rydberg_local["siteCoefficientRange"]
+
+    return DeviceCapabilitiesConstants.parse_obj(capabilities)
+
+
+
+def ahs_noise_model(properties: DeviceCapabilities) -> AhsNoise: 
+    return _ahs_noise_model(properties)
+
+@singledispatch
+def _ahs_noise_model(properties: DeviceCapabilities) -> AhsNoise:
+    raise NotImplementedError("An AHS noise model cannot be created from device capabilities of "
+                              f"type {type(properties)}.")
+    
+@_ahs_noise_model.register(QueraDeviceCapabilities)
+def _(properties: QueraDeviceCapabilities): 
+
+    capabilities = properties.paradigm
+    performance = capabilities.performance
+    noise_data = AhsNoiseData(
+        site_position_error= float(performance.lattice.sitePositionError),
+        filling_error = float(performance.lattice.vacancyErrorTypical),
+        vacancy_error = float(performance.lattice.vacancyErrorTypical), 
+        ground_prep_error = float(performance.rydberg.rydbergGlobal.groundPrepError),
+        rabi_amplitude_ramp_correction = performance.rydberg.rydbergGlobal.rabiAmplitudeRampCorrection,
+        rabi_frequency_error_rel = float(performance.rydberg.rydbergGlobal.rabiFrequencyGlobalErrorRel),
+        detuning_error = float(performance.rydberg.rydbergGlobal.detuningError),
+        detuning_inhomogeneity = float(performance.rydberg.rydbergGlobal.detuningInhomogeneity), 
+        atom_detection_error_false_positive = float(performance.lattice.atomDetectionErrorFalsePositiveTypical), 
+        atom_detection_error_false_negative = float(performance.lattice.atomDetectionErrorFalseNegativeTypical), 
+        rabi_amplitude_max = float(capabilities.rydberg.rydbergGlobal.rabiFrequencyRange[-1])
+    )
+    return AhsNoise(noise_data)
