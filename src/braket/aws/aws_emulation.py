@@ -18,6 +18,7 @@ from braket.emulation.emulation_passes.gate_device_passes import (
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
+    LexiRoutingPass
 )
 
 
@@ -334,3 +335,38 @@ def _(properties: QueraDeviceCapabilities):
         rabi_amplitude_max = float(capabilities.rydberg.rydbergGlobal.rabiFrequencyRange[-1])
     )
     return AhsNoise(noise_data)
+
+
+
+def lexi_mapping_routing_pass(
+    properties: DeviceCapabilities, connectivity_graph: DiGraph
+) -> LexiRoutingPass:
+    return _lexi_mapping_routing_pass(properties, connectivity_graph)
+
+@singledispatch
+def _lexi_mapping_routing_pass(
+    properties: DeviceCapabilities, connectivity_graph: DiGraph
+) -> LexiRoutingPass:
+    raise NotImplementedError
+
+
+@_lexi_mapping_routing_pass.register(RigettiDeviceCapabilities)
+@_lexi_mapping_routing_pass.register(IonqDeviceCapabilities)
+def _(
+    properties: Union[RigettiDeviceCapabilities, IonqDeviceCapabilities],
+    connectivity_graph: DiGraph,
+) -> LexiRoutingPass:
+    return LexiRoutingPass(connectivity_graph)
+
+
+@_lexi_mapping_routing_pass.register(IqmDeviceCapabilities)
+def _(properties: IqmDeviceCapabilities, connectivity_graph: DiGraph) -> LexiRoutingPass:
+    """
+    IQM provides only forward edges for their *undirected* gate connectivity graph, so back-edges must
+    be introduced when creating the GateConnectivityCriterion object for an IQM QPU.
+    """
+
+    connectivity_graph = connectivity_graph.copy()
+    for edge in connectivity_graph.edges:
+        connectivity_graph.add_edge(edge[1], edge[0])
+    return LexiRoutingPass(connectivity_graph)

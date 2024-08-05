@@ -1,4 +1,4 @@
-from braket.emulation.emulation_passes import EmulationPass
+from braket.passes.base_pass import BasePass
 from braket.ahs import AnalogHamiltonianSimulation
 from braket.timings.time_series import TimeSeries
 from braket.ahs.pattern import Pattern
@@ -32,7 +32,7 @@ class AhsNoiseData:
 AhsProgramType = TypeVar('AhsProgramType', bound = AHSProgram | AnalogHamiltonianSimulation)
 
 
-class AhsNoise(EmulationPass[AhsProgramType]):
+class AhsNoise(BasePass[AhsProgramType]):
     def __init__(self, ahs_noise_data: AhsNoiseData):
         self._noise_data = ahs_noise_data
     
