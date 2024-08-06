@@ -35,7 +35,8 @@ from braket.aws.aws_emulation import (
     gate_connectivity_validator,
     gate_validator,
     qubit_count_validator,
-    lexi_mapping_routing_pass
+    lexi_mapping_routing_pass, 
+    create_nativization_pass
 )
 from braket.aws.aws_noise_models import device_noise_model
 from braket.aws.aws_quantum_task import AwsQuantumTask
@@ -930,6 +931,7 @@ class AwsDevice(Device):
         self._emulator.add_pass(connectivity_validator(self.properties, self.topology_graph))
         self._emulator.add_pass(gate_connectivity_validator(self.properties, self.topology_graph))
         self._emulator.add_pass(lexi_mapping_routing_pass(self.properties, self.topology_graph))
+        self._emulator.add_pass(create_nativization_pass(self.properties, self.topology_graph))
         return self._emulator
 
     def _setup_ahs_device_emulator(self) -> Emulator:

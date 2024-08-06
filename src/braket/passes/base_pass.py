@@ -24,3 +24,8 @@ class BasePass(ABC, Generic[ProgramType]):
 
     def __call__(self, program: ProgramType) -> ProgramType:
         return self.run(program)
+
+
+class NoOpPass(BasePass[ProgramType]):
+    def run(self, program: ProgramType) -> ProgramType:
+        return program

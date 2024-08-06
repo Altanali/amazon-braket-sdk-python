@@ -13,3 +13,6 @@ from braket.emulation.emulation_passes.gate_device_passes.qubit_count_validator 
 from braket.emulation.emulation_passes.gate_device_passes.lexi_routing_pass import ( #noqa: F401 E501
     LexiRoutingPass                                                                                    
 )
+from braket.emulation.emulation_passes.gate_device_passes.tket_compiler_pass import ( #noqa: F401 E501
+    TketCompilerPass
+)

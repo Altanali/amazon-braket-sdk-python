@@ -13,14 +13,30 @@ from braket.emulation.emulation_passes.ahs_passes import AhsValidator, AhsNoise,
 from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
     DeviceCapabilitiesConstants,
 )
+from braket.passes import NoOpPass
 from braket.emulation.emulation_passes.gate_device_passes import (
     ConnectivityValidator,
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
-    LexiRoutingPass
+    LexiRoutingPass, 
+    TketCompilerPass
 )
 
+from pytket.transform import Transform
+from pytket.passes import (
+    RemoveRedundancies, 
+    SimplifyInitial, 
+    auto_rebase_pass,
+    SquashRzPhasedX, 
+    auto_squash_pass, 
+    RebaseCustom, 
+    SquashTK1
+)
+from pytket.circuit import OpType
+from pytket.architecture import Architecture
+from braket.aws.demo_helpers.compile.passes import get_virtualize_rz_pass
+from braket.aws.demo_helpers.compile import tket_decompositions
 
 
 def qubit_count_validator(properties: DeviceCapabilities) -> QubitCountValidator:
@@ -370,3 +386,52 @@ def _(properties: IqmDeviceCapabilities, connectivity_graph: DiGraph) -> LexiRou
     for edge in connectivity_graph.edges:
         connectivity_graph.add_edge(edge[1], edge[0])
     return LexiRoutingPass(connectivity_graph)
+
+
+# Nativization set up
+@singledispatch
+def create_nativization_pass(properties: DeviceCapabilities, connectivity_graph: DiGraph) -> TketCompilerPass:
+    return NoOpPass()
+
+@create_nativization_pass.register(IqmDeviceCapabilities)
+def _(properties: IqmDeviceCapabilities, connectivity_graph: DiGraph) -> TketCompilerPass:
+    connectivity_graph = connectivity_graph.copy()
+    for edge in connectivity_graph.edges:
+        connectivity_graph.add_edge(edge[1], edge[0])
+    
+    iqm_architecture = Architecture(list(connectivity_graph.edges))
+    
+    tket_passes = [
+        Transform.DecomposeBRIDGE(),
+        Transform.DecomposeSWAPtoCX(iqm_architecture),
+        Transform.OptimisePostRouting(),
+        RemoveRedundancies(),
+        SimplifyInitial(allow_classical=True, create_all_qubits=True),
+        auto_rebase_pass(gateset={OpType.CZ, OpType.PhasedX, OpType.Rz}), 
+        SquashRzPhasedX(),
+        get_virtualize_rz_pass()
+    ]
+    return TketCompilerPass(tket_passes)
+
+
+
+# @create_nativization_pass.register(IonqDeviceCapabilities)
+# def _(properties: IonqDeviceCapabilities, connectivity_graph: DiGraph) -> TketCompilerPass:
+    
+#     ionq_architecture = Architecture(list(connectivity_graph.edges))
+#     tket_passes = [
+#         Transform.DecomposeBRIDGE(), 
+#         Transform.DecomposeSWAPtoCX(ionq_architecture), 
+#         Transform.OptimisePostRouting(),
+#         RebaseCustom(
+#             {OpType.Rz, OpType.Rx}, tket_decompositions.cx_to_ms(), tket_decompositions.tk1_to_zxz
+#         ), 
+#         SimplifyInitial(allow_classical=True, create_all_qubits=True),
+#         SquashTK1(), 
+#         RebaseCustom(
+#             {OpType.Rz, OpType.CustomGate},
+#             cx_replacement=tket_decompositions.cx_to_ms(),
+#             tk1_replacement=tket_decompositions.tk1_to_gpi,
+#         )
+#     ]
+#     return TketCompilerPass(tket_passes)

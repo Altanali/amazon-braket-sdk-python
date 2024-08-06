@@ -1,1 +1,5 @@
-from braket.passes.base_pass import BasePass, ProgramType  # noqa: F40
+from braket.passes.base_pass import ( # noqa: F40
+    BasePass,
+    NoOpPass,
+    ProgramType
+)
