@@ -65,7 +65,6 @@ def _gate_validator(properties: DeviceCapabilities) -> GateValidator:
 
 @_gate_validator.register(RigettiDeviceCapabilities)
 def _(properties: RigettiDeviceCapabilities) -> Iterable[ValidationPass]:
-    print("entered here")
     supported_gates = properties.action[DeviceActionType.OPENQASM].supportedOperations
     native_gates = properties.paradigm.nativeGateSet
 
