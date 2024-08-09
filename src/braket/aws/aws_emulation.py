@@ -8,11 +8,13 @@ from braket.device_schema import DeviceActionType, DeviceCapabilities
 from braket.device_schema.ionq import IonqDeviceCapabilities
 from braket.device_schema.iqm import IqmDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
+from braket.emulation.emulation_passes import ValidationPass
 from braket.emulation.emulation_passes.gate_device_passes import (
     ConnectivityValidator,
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
+    RigettiRxArgsValidator,
 )
 
 
@@ -33,24 +35,42 @@ def qubit_count_validator(properties: DeviceCapabilities) -> QubitCountValidator
     return QubitCountValidator(qubit_count)
 
 
-def gate_validator(properties: DeviceCapabilities) -> GateValidator:
+def gate_validator(
+    properties: DeviceCapabilities,
+) -> Union[GateValidator, Iterable[ValidationPass]]:
     """
-    Create a GateValidator pass which defines what supported and native gates are allowed in a
-    program based on the provided device properties.
+    Create a pass (or multiple passes) that checks that the  gate operations used in a circuit
+    are supported by the device capabilities and gate operations used in verbatim circuits are
+    native to the device capabilities.
 
     Args:
         properties (DeviceCapabilities): QPU Device Capabilities object with a
             QHP-specific schema.
 
     Returns:
-        GateValidator: An emulator pass that checks that a circuit only uses supported gates and
-        verbatim circuits only use native gates.
+        Union[GateValidator, Iterable[ValidationPass]]: The resulting gate validation passes based
+        on the device capabilities
     """
 
+    return _gate_validator(properties)
+
+
+@singledispatch
+def _gate_validator(properties: DeviceCapabilities) -> GateValidator:
     supported_gates = properties.action[DeviceActionType.OPENQASM].supportedOperations
     native_gates = properties.paradigm.nativeGateSet
 
     return GateValidator(supported_gates=supported_gates, native_gates=native_gates)
+
+
+@_gate_validator.register(RigettiDeviceCapabilities)
+def _(properties: RigettiDeviceCapabilities) -> Iterable[ValidationPass]:
+    print("entered here")
+    supported_gates = properties.action[DeviceActionType.OPENQASM].supportedOperations
+    native_gates = properties.paradigm.nativeGateSet
+
+    gate_validator = GateValidator(supported_gates=supported_gates, native_gates=native_gates)
+    return [gate_validator, RigettiRxArgsValidator()]
 
 
 def connectivity_validator(

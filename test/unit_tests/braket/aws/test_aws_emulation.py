@@ -36,6 +36,7 @@ from braket.emulation.emulation_passes.gate_device_passes import (
     GateConnectivityValidator,
     GateValidator,
     QubitCountValidator,
+    RigettiRxArgsValidator,
 )
 
 REGION = "us-west-1"
@@ -603,6 +604,7 @@ def test_rigetti_emulator(rigetti_device, rigetti_target_noise_model):
             supported_gates=["H", "X", "CNot", "CZ", "Rx", "Ry", "YY"],
             native_gates=["cz", "prx", "cphaseshift"],
         ),
+        RigettiRxArgsValidator(),
         ConnectivityValidator(
             nx.from_edgelist([(0, 1), (0, 2), (1, 0), (2, 0)], create_using=nx.DiGraph())
         ),
@@ -620,6 +622,7 @@ def test_rigetti_emulator(rigetti_device, rigetti_target_noise_model):
             )
         ),
     ]
+    print(emulator._emulator_passes)
     assert emulator._emulator_passes == target_emulator_passes
 
 
