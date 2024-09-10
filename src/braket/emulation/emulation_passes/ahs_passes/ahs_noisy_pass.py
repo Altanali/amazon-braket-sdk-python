@@ -29,7 +29,8 @@ class AhsNoiseData:
     atom_detection_error_false_negative: float
     
     
-AhsProgramType = TypeVar('AhsProgramType', bound = AHSProgram | AnalogHamiltonianSimulation)
+# AhsProgramType = TypeVar('AhsProgramType', bound = AHSProgram | AnalogHamiltonianSimulation) # Gives error TypeError: unsupported operand type(s) for |: 'ModelMetaclass' and 'type'
+AhsProgramType = TypeVar('AhsProgramType', bound = Union[AHSProgram, AnalogHamiltonianSimulation])
 
 
 class AhsNoise(EmulationPass[AhsProgramType]):
