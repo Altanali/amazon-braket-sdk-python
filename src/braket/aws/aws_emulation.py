@@ -9,7 +9,7 @@ from braket.device_schema.ionq import IonqDeviceCapabilities
 from braket.device_schema.iqm import IqmDeviceCapabilities
 from braket.device_schema.quera import QueraDeviceCapabilities
 from braket.device_schema.rigetti import RigettiDeviceCapabilities
-# from braket.emulation.emulation_passes.ahs_passes import AhsValidator, AhsNoise, AhsNoiseData
+from braket.emulation.emulation_passes.ahs_passes import AhsValidator #, AhsNoise, AhsNoiseData
 from braket.emulation.emulation_passes.ahs_passes.device_capabilities_constants import (
     DeviceCapabilitiesConstants,
 )
