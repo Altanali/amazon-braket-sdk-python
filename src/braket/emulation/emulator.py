@@ -163,8 +163,8 @@ class Emulator(Device, BaseEmulator):
                     program = super().run_passes(task_specification)
                     return program
                 else:
-                    self.validate(program)
-                    return program
+                    self.validate(task_specification)
+                    return task_specification
             except Exception as e:
                 self._raise_exception(e)
         else:
