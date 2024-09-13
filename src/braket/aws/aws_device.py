@@ -933,7 +933,7 @@ class AwsDevice(Device):
     def _setup_ahs_device_emulator(self) -> Emulator:
         self._emulator = Emulator(backend="braket_ahs_noisy", name=self._name)
         self._emulator.add_pass(ahs_criterion(self.properties))
-        # self._emulator.add_pass(ahs_noise_model(self.properties))
+        self._emulator.add_pass(ahs_noise_model(self.properties))
         return self._emulator
 
     def validate(
