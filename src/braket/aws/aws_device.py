@@ -30,7 +30,7 @@ from braket.ahs.analog_hamiltonian_simulation import AnalogHamiltonianSimulation
 from braket.annealing.problem import Problem
 from braket.aws.aws_emulation import (
     ahs_criterion,
-    ahs_noise_model,
+    # ahs_noise_model,
     connectivity_validator,
     gate_connectivity_validator,
     gate_validator,
