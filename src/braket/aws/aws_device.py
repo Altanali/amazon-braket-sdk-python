@@ -979,6 +979,8 @@ class AwsDevice(Device):
         task_specification: ProgramType,
         shots: Optional[int] = None,
         inputs: Optional[dict[str, float]] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> QuantumTask:
         """Emulate a quantum task specification on this quantum device emulator.
         A quantum task can be a circuit. Emulation
@@ -999,4 +1001,4 @@ class AwsDevice(Device):
             QuantumTask: The QuantumTask tracking task execution on this device emulator.
         """
         task_specification = deepcopy(task_specification)
-        return self.emulator.run(task_specification, shots, inputs)
+        return self.emulator.run(task_specification, shots, inputs, *args, **kwargs)
