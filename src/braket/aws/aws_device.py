@@ -931,7 +931,7 @@ class AwsDevice(Device):
         return self._emulator
 
     def _setup_ahs_device_emulator(self) -> Emulator:
-        self._emulator = Emulator(backend="braket_ahs", name=self._name)
+        self._emulator = Emulator(backend="braket_ahs_tn_noisy", name=self._name)
         self._emulator.add_pass(ahs_criterion(self.properties))
         self._emulator.add_pass(ahs_noise_model(self.properties))
         return self._emulator
@@ -979,6 +979,8 @@ class AwsDevice(Device):
         task_specification: ProgramType,
         shots: Optional[int] = None,
         inputs: Optional[dict[str, float]] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> QuantumTask:
         """Emulate a quantum task specification on this quantum device emulator.
         A quantum task can be a circuit. Emulation
@@ -999,4 +1001,4 @@ class AwsDevice(Device):
             QuantumTask: The QuantumTask tracking task execution on this device emulator.
         """
         task_specification = deepcopy(task_specification)
-        return self.emulator.run(task_specification, shots, inputs)
+        return self.emulator.run(task_specification, shots, inputs, *args, **kwargs)

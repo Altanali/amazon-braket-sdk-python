@@ -12,7 +12,7 @@ from braket.emulation.emulation_passes import EmulationPass, ProgramType
 from braket.ir.openqasm import Program as OpenQasmProgram
 from braket.tasks import QuantumTask
 from braket.tasks.quantum_task_batch import QuantumTaskBatch
-
+from braket.ahs.analog_hamiltonian_simulation import AnalogHamiltonianSimulation
 
 class Emulator(Device, BaseEmulator):
 
@@ -157,13 +157,24 @@ class Emulator(Device, BaseEmulator):
             ProgramType: A compiled program with a noise model applied, if one
             exists for this emulator and apply_noise_model is true.
         """
-        try:
-            program = super().run_passes(task_specification)
-            if apply_noise_model and self.noise_model:
-                return self._noise_model.apply(program)
-            return program
-        except Exception as e:
-            self._raise_exception(e)
+        if isinstance(task_specification, AnalogHamiltonianSimulation):
+            try:
+                if apply_noise_model:
+                    program = super().run_passes(task_specification)
+                    return program
+                else:
+                    self.validate(task_specification)
+                    return task_specification
+            except Exception as e:
+                self._raise_exception(e)
+        else:
+            try:
+                program = super().run_passes(task_specification)
+                if apply_noise_model and self.noise_model:
+                    return self._noise_model.apply(program)
+                return program
+            except Exception as e:
+                self._raise_exception(e)
 
     def validate(self, task_specification: ProgramType) -> None:
         """
