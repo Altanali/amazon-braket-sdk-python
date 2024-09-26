@@ -40,10 +40,10 @@ QASM_TO_PYTKET = {
     "ccnot": OpType.CCX,
     "cswap": OpType.CSWAP,
     "unitary": OpType.U3,
-    "gpi": OpType.GPI,
-    "gpi2": OpType.GPI2,
-    "ms": OpType.AAMS,
-    "cphaseshift": OpType.CU1,
+#    "gpi": OpType.GPI,
+#    "gpi2": OpType.GPI2,
+#    "ms": OpType.AAMS,
+#    "cphaseshift": OpType.CU1,
     "prx": OpType.PhasedX,
 }
 
